@@ -18,7 +18,7 @@ impl BenchmarkTest for AnyArrayBenchmark {
                 .bind(ids)
                 .fetch_all(&context.pool)
                 .await
-                .map_err(|e| BenchmarkError::Database(e))?;
+                .map_err(BenchmarkError::Database)?;
 
         Ok(result)
     }

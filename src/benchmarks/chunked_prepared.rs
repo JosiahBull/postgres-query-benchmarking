@@ -37,7 +37,7 @@ impl BenchmarkTest for ChunkedPreparedBenchmark {
             let overrides: Vec<ExampleData> = query_builder
                 .fetch_all(&context.pool)
                 .await
-                .map_err(|e| BenchmarkError::Database(e))?;
+                .map_err(BenchmarkError::Database)?;
 
             all_overrides.extend(overrides);
         }

@@ -2,5 +2,5 @@
 *populate.sql
 /data
 .env
-/logs
+logs/
 !logs/.gitkeep

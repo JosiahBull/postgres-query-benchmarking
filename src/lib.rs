@@ -12,7 +12,7 @@ use thiserror::Error;
 /// Configuration constants for benchmarking
 pub const ITERATIONS: usize = 100;
 pub const TEST_IDS: usize = 60_000;
-pub const ID_RANGE: u64 = 50_000_000;
+pub const ID_RANGE: u64 = 20_000_000;
 pub const MAX_CONNECTIONS: u32 = 10;
 pub const LOG_FILE_NAME: &str = "logs/benchmark_results.log";
 
@@ -120,7 +120,7 @@ impl BenchmarkStats {
 
     /// Get nth percentile
     pub fn percentile(&self, p: f64) -> Duration {
-        if self.runs.is_empty() || p < 0.0 || p > 100.0 {
+        if self.runs.is_empty() || !(0.0..=100.0).contains(&p) {
             return Duration::ZERO;
         }
         let mut sorted = self.runs.clone();

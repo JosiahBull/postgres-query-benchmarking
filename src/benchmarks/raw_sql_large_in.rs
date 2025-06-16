@@ -30,7 +30,7 @@ impl BenchmarkTest for RawSqlLargeInBenchmark {
         let result: Vec<ExampleData> = sqlx::query_as(&query)
             .fetch_all(&context.pool)
             .await
-            .map_err(|e| BenchmarkError::Database(e))?;
+            .map_err(BenchmarkError::Database)?;
 
         Ok(result)
     }
