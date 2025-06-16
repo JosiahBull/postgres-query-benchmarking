@@ -1,6 +1,6 @@
 # PostgreSQL Query Benchmarking Suite
 
-This project benchmarks different approaches for querying PostgreSQL with large sets of IDs, comparing performance characteristics of various strategies.
+This project benchmarks different approaches for querying PostgreSQL with large sets of IDs, comparing performance characteristics of various strategies. Results are automatically exported to CSV format for easy analysis in Excel, Google Sheets, or other data analysis tools.
 
 ## Overview
 
@@ -30,7 +30,10 @@ The easiest way to get started is using the provided Docker-based setup:
 # Initialize directories and start PostgreSQL container
 ./scripts/setup.sh
 
-# Run benchmarks
+# Or with optimizations enabled
+./scripts/setup.sh --mode optimized
+
+# Run benchmarks with CSV output (default)
 cargo run --release
 ```
 
@@ -52,7 +55,17 @@ cargo check
 
 ## Output
 
-The suite generates detailed results in `benchmark_results.log` containing:
+The suite generates multiple output formats:
+
+### CSV Files (Default)
+- **`logs/raw_results.csv`** - Individual timing data for each benchmark run
+  - Columns: benchmark_name, description, input_size, rows_returned, run_number, duration_ms, duration_ns
+  - Perfect for time-series analysis and detailed statistical work
+- **`logs/summary.csv`** - Aggregated statistics for each benchmark
+  - Columns: benchmark_name, description, input_size, rows_returned, total_runs, mean_ms, median_ms, std_dev_ms, min_ms, max_ms, p50_ms, p95_ms, p99_ms
+
+### Log File
+The suite also generates detailed results in `logs/benchmark_results.log` containing:
 
 - **Summary Table** - Sorted by median performance
 - **Detailed Statistics** - Mean, median, min, max, standard deviation

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # PostgreSQL Benchmark Setup Script
-# Simplified version that manages Docker containers for benchmarking
+# Manages Docker containers for benchmarking with optimization modes
 
 set -euo pipefail
 
@@ -15,6 +15,9 @@ POSTGRES_PORT="5432"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 DATA_DIR="$PROJECT_DIR/data"
+
+# Default mode is cold (for benchmarking)
+MODE="cold"
 
 # Colors for output
 RED='\033[0;31m'
@@ -37,6 +40,46 @@ log_warn() {
 
 log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
+}
+
+show_usage() {
+    echo "Usage: $0 [OPTIONS]"
+    echo ""
+    echo "Options:"
+    echo "  -m, --mode MODE    Set PostgreSQL optimization mode:"
+    echo "                     cold     - Cold query mode (default, for benchmarking)"
+    echo "                     optimized - Optimized mode (for performance testing)"
+    echo "  -h, --help        Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  $0                    # Run with cold query mode (default)"
+    echo "  $0 -m cold          # Explicitly set cold query mode"
+    echo "  $0 -m optimized     # Run with optimized settings"
+}
+
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -m|--mode)
+                MODE="$2"
+                if [[ "$MODE" != "cold" && "$MODE" != "optimized" ]]; then
+                    log_error "Invalid mode: $MODE. Must be 'cold' or 'optimized'"
+                    show_usage
+                    exit 1
+                fi
+                shift 2
+                ;;
+            -h|--help)
+                show_usage
+                exit 0
+                ;;
+            *)
+                log_error "Unknown option: $1"
+                show_usage
+                exit 1
+                ;;
+        esac
+    done
 }
 
 check_docker() {
@@ -84,15 +127,15 @@ cleanup_existing() {
 }
 
 setup_container() {
-    log_info "Setting up PostgreSQL container for benchmarking..."
+    log_info "Setting up PostgreSQL container for benchmarking in $MODE mode..."
 
     check_docker
 
     # Create data directory
     mkdir -p "$DATA_DIR"
 
-    # Create and start container with optimized settings for benchmarking
-    log_info "Creating PostgreSQL container with benchmark optimizations..."
+    # Create and start container
+    log_info "Creating PostgreSQL container with cold query settings for benchmarking..."
     docker run -d \
         --name "$CONTAINER_NAME" \
         -e POSTGRES_USER="$POSTGRES_USER" \
@@ -131,11 +174,17 @@ setup_container() {
         log_success "Database setup completed"
     fi
 
-    local sql_script2="$SCRIPT_DIR/cold_query_init.sql"
-    if [[ -f "$sql_script2" ]]; then
+    # Apply mode-specific configuration
+    if [[ "$MODE" == "cold" ]]; then
+        local cold_script="$SCRIPT_DIR/cold_query_init.sql"
         log_info "Running cold query initialization script..."
-        docker exec -i "$CONTAINER_NAME" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" < "$sql_script2"
+        docker exec -i "$CONTAINER_NAME" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" < "$cold_script"
         log_success "Cold query initialization completed"
+    else
+        local optimized_script="$SCRIPT_DIR/optimized_init.sql"
+        log_info "Running optimized configuration script..."
+        docker exec -i "$CONTAINER_NAME" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" < "$optimized_script"
+        log_success "Optimized configuration completed"
     fi
 
     # Restart container to apply settings
@@ -162,11 +211,20 @@ setup_container() {
         ((attempt++))
     done
 
-    log_success "PostgreSQL container setup completed"
+    log_success "PostgreSQL container setup completed in $MODE mode"
     log_info "Connection URL: postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@localhost:$POSTGRES_PORT/$POSTGRES_DB"
+
+    if [[ "$MODE" == "optimized" ]]; then
+        log_info "Running with performance optimizations enabled"
+        log_info "JIT compilation, plan caching, and autovacuum are enabled"
+    else
+        log_info "Running in cold query mode for consistent benchmarking"
+        log_info "JIT compilation, plan caching, and autovacuum are disabled"
+    fi
 }
 
 main() {
+    parse_args "$@"
     cleanup_existing
     setup_container
 }

@@ -6,6 +6,9 @@
 
 use async_trait::async_trait;
 use sqlx::postgres::PgPool;
+use std::fs::OpenOptions;
+use std::io::Write;
+use std::path::Path;
 use std::time::Duration;
 use thiserror::Error;
 
@@ -15,6 +18,7 @@ pub const TEST_IDS: usize = 60_000;
 pub const ID_RANGE: u64 = 20_000_000;
 pub const MAX_CONNECTIONS: u32 = 10;
 pub const LOG_FILE_NAME: &str = "logs/benchmark_results.log";
+pub const CSV_FILE_NAME: &str = "logs/benchmark_results.csv";
 
 /// Data structure returned by benchmark queries
 #[derive(sqlx::FromRow, Debug, Clone)]
@@ -58,6 +62,90 @@ impl BenchmarkStats {
             rows_returned: 0,
             input_size,
         }
+    }
+
+    /// Export raw timing data to CSV format
+    ///
+    /// # Arguments
+    /// * `csv_path` - Path to the CSV file to write to
+    ///
+    /// # Returns
+    /// * `BenchmarkResult<()>` - Success or IO error
+    pub fn export_to_csv(&self, csv_path: &Path) -> BenchmarkResult<()> {
+        let file_exists = csv_path.exists();
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(csv_path)?;
+
+        // Write header if file is new
+        if !file_exists {
+            writeln!(
+                file,
+                "benchmark_name,description,input_size,rows_returned,run_number,duration_ms,duration_ns"
+            )?;
+        }
+
+        // Write each run as a separate row
+        for (run_number, duration) in self.runs.iter().enumerate() {
+            writeln!(
+                file,
+                "{},{},{},{},{},{},{}",
+                self.name,
+                self.description.replace(",", ";"), // Replace commas to avoid CSV issues
+                self.input_size,
+                self.rows_returned,
+                run_number + 1,
+                duration.as_millis(),
+                duration.as_nanos()
+            )?;
+        }
+
+        Ok(())
+    }
+
+    /// Export summary statistics to CSV format
+    ///
+    /// # Arguments
+    /// * `csv_path` - Path to the CSV file to write to
+    ///
+    /// # Returns
+    /// * `BenchmarkResult<()>` - Success or IO error
+    pub fn export_summary_to_csv(&self, csv_path: &Path) -> BenchmarkResult<()> {
+        let file_exists = csv_path.exists();
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(csv_path)?;
+
+        // Write header if file is new
+        if !file_exists {
+            writeln!(
+                file,
+                "benchmark_name,description,input_size,rows_returned,total_runs,mean_ms,median_ms,std_dev_ms,min_ms,max_ms,p50_ms,p95_ms,p99_ms"
+            )?;
+        }
+
+        // Write summary statistics
+        writeln!(
+            file,
+            "{},{},{},{},{},{},{},{},{},{},{},{},{}",
+            self.name,
+            self.description.replace(",", ";"), // Replace commas to avoid CSV issues
+            self.input_size,
+            self.rows_returned,
+            self.runs.len(),
+            self.mean().as_millis(),
+            self.median().as_millis(),
+            self.std_deviation().as_millis(),
+            self.min().as_millis(),
+            self.max().as_millis(),
+            self.percentile(50.0).as_millis(),
+            self.percentile(95.0).as_millis(),
+            self.percentile(99.0).as_millis()
+        )?;
+
+        Ok(())
     }
 
     /// Add a benchmark result
@@ -219,7 +307,57 @@ pub mod benchmarks;
 pub mod utils {
     use super::*;
     use std::collections::HashSet;
+    use std::fs;
+    use std::path::Path;
     use tracing::info;
+
+    /// Initialize CSV output directory and files
+    ///
+    /// # Arguments
+    /// * `csv_dir` - Directory to create for CSV files
+    ///
+    /// # Returns
+    /// * `BenchmarkResult<()>` - Success or IO error
+    pub fn init_csv_output(csv_dir: &Path) -> BenchmarkResult<()> {
+        // Create the directory if it doesn't exist
+        fs::create_dir_all(csv_dir)?;
+
+        let raw_results_path = csv_dir.join("raw_results.csv");
+        let summary_path = csv_dir.join("summary.csv");
+
+        // Clear existing files by truncating them
+        if raw_results_path.exists() {
+            fs::remove_file(&raw_results_path)?;
+        }
+        if summary_path.exists() {
+            fs::remove_file(&summary_path)?;
+        }
+
+        info!("Initialized CSV output directory: {}", csv_dir.display());
+        Ok(())
+    }
+
+    /// Get the path for raw results CSV file
+    ///
+    /// # Arguments
+    /// * `csv_dir` - Directory containing CSV files
+    ///
+    /// # Returns
+    /// * `PathBuf` - Path to raw results CSV file
+    pub fn get_raw_results_csv_path(csv_dir: &Path) -> std::path::PathBuf {
+        csv_dir.join("raw_results.csv")
+    }
+
+    /// Get the path for summary CSV file
+    ///
+    /// # Arguments
+    /// * `csv_dir` - Directory containing CSV files
+    ///
+    /// # Returns
+    /// * `PathBuf` - Path to summary CSV file
+    pub fn get_summary_csv_path(csv_dir: &Path) -> std::path::PathBuf {
+        csv_dir.join("summary.csv")
+    }
 
     /// Generate unique random IDs for testing
     ///

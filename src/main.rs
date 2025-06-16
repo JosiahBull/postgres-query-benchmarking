@@ -8,12 +8,12 @@ use pg_hacking::{
     BenchmarkContext, BenchmarkStats, BenchmarkTest, ID_RANGE, ITERATIONS, LOG_FILE_NAME,
     MAX_CONNECTIONS, TEST_IDS,
     benchmarks::{get_all_benchmarks, get_benchmark_by_name},
-    utils::generate_test_ids,
+    utils::{generate_test_ids, get_raw_results_csv_path, get_summary_csv_path, init_csv_output},
 };
 
 use clap::{Parser, Subcommand};
 use sqlx::postgres::PgPoolOptions;
-use std::{fs::File, io::Write, sync::Arc, time::Instant};
+use std::{fs::File, io::Write, path::PathBuf, sync::Arc, time::Instant};
 use tracing::{error, info, instrument, warn};
 
 /// Command line arguments for the benchmark suite
@@ -31,6 +31,14 @@ struct Cli {
     /// Number of test IDs to generate
     #[arg(short, long, default_value_t = TEST_IDS)]
     test_ids: usize,
+
+    /// Enable CSV output (default: true)
+    #[arg(long, default_value_t = true)]
+    csv_output: bool,
+
+    /// CSV output directory
+    #[arg(long, default_value = "logs")]
+    csv_dir: String,
 
     /// Command to execute
     #[command(subcommand)]
@@ -53,11 +61,17 @@ struct BenchmarkSuite {
     context: BenchmarkContext,
     results: Vec<BenchmarkStats>,
     log_file: File,
+    csv_output: bool,
+    csv_dir: PathBuf,
 }
 
 impl BenchmarkSuite {
     /// Create a new benchmark suite
-    async fn new(database_url: &str) -> Result<Self, Box<dyn std::error::Error>> {
+    async fn new(
+        database_url: &str,
+        csv_output: bool,
+        csv_dir: &str,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         info!("Connecting to database: {}", database_url);
         let pool = PgPoolOptions::new()
             .max_connections(MAX_CONNECTIONS)
@@ -76,10 +90,23 @@ impl BenchmarkSuite {
             e
         })?;
 
+        let csv_dir_path = PathBuf::from(csv_dir);
+
+        // Initialize CSV output if enabled
+        if csv_output {
+            init_csv_output(&csv_dir_path).map_err(|e| {
+                error!("Failed to initialize CSV output: {}", e);
+                e
+            })?;
+            info!("CSV output initialized in directory: {}", csv_dir);
+        }
+
         Ok(Self {
             context,
             results: Vec::new(),
             log_file,
+            csv_output,
+            csv_dir: csv_dir_path,
         })
     }
 
@@ -159,6 +186,20 @@ impl BenchmarkSuite {
 
         if !stats.runs.is_empty() {
             let runs_count = stats.runs.len();
+
+            // Export to CSV if enabled
+            if self.csv_output {
+                let raw_csv_path = get_raw_results_csv_path(&self.csv_dir);
+                if let Err(e) = stats.export_to_csv(&raw_csv_path) {
+                    warn!("Failed to export raw results to CSV for {}: {}", name, e);
+                }
+
+                let summary_csv_path = get_summary_csv_path(&self.csv_dir);
+                if let Err(e) = stats.export_summary_to_csv(&summary_csv_path) {
+                    warn!("Failed to export summary to CSV for {}: {}", name, e);
+                }
+            }
+
             self.results.push(stats);
             info!(
                 "Benchmark {} completed: {} successful runs out of {} attempts",
@@ -291,7 +332,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Initialize benchmark suite
-    let mut suite = BenchmarkSuite::new(&database_url).await?;
+    let mut suite = BenchmarkSuite::new(&database_url, cli.csv_output, &cli.csv_dir).await?;
 
     // Generate test data
     info!(
@@ -341,6 +382,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     suite.write_results()?;
 
     info!("Benchmark completed! Results written to {}", LOG_FILE_NAME);
+    if suite.csv_output {
+        info!(
+            "CSV results written to directory: {}",
+            suite.csv_dir.display()
+        );
+        info!(
+            "  - Raw results: {}",
+            get_raw_results_csv_path(&suite.csv_dir).display()
+        );
+        info!(
+            "  - Summary: {}",
+            get_summary_csv_path(&suite.csv_dir).display()
+        );
+    }
     info!("Total benchmarks completed: {}", suite.results.len());
 
     // Print summary to console
