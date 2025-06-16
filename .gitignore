@@ -1,0 +1,6 @@
+/target
+*populate.sql
+/data
+.env
+/logs
+!logs/.gitkeep
