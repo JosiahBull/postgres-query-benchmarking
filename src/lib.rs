@@ -13,7 +13,7 @@ use std::time::Duration;
 use thiserror::Error;
 
 /// Configuration constants for benchmarking
-pub const ITERATIONS: usize = 100;
+pub const ITERATIONS: usize = 1000;
 pub const TEST_IDS: usize = 60_000;
 pub const ID_RANGE: u64 = 20_000_000;
 pub const MAX_CONNECTIONS: u32 = 10;
