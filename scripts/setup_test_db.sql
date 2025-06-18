@@ -1,15 +1,16 @@
--- PostgreSQL Test Database Setup Script
--- Create the OVERRIDES table
-DROP TABLE IF EXISTS OVERRIDES;
+-- Add the pgcrypto extension for hashing
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
-CREATE TABLE OVERRIDES (
-    ID UUID PRIMARY KEY DEFAULT gen_random_uuid (),
-    HASH BIGINT NOT NULL UNIQUE,
-    RESPONSE TEXT NOT NULL
+-- Create the OVERRIDES table
+DROP TABLE IF EXISTS overrides;
+CREATE TABLE overrides (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    hash BYTEA NOT NULL UNIQUE,
+    response TEXT NOT NULL
 );
 
 -- Create index for performance (crucial for benchmarks)
-CREATE INDEX idx_overrides_hash ON OVERRIDES (HASH) INCLUDE (RESPONSE);
+CREATE INDEX idx_overrides_hash ON overrides (hash) INCLUDE (response);
 
 -- Insert sample data (20 million rows) using batched approach for better performance
 DO $$
@@ -26,12 +27,12 @@ BEGIN
     WHILE current_start <= total_rows LOOP
         current_end := LEAST(current_start + batch_size - 1, total_rows);
 
-        INSERT INTO OVERRIDES (HASH, RESPONSE)
+        INSERT INTO overrides (hash, response)
         SELECT
-            -- Create a fake hash that counts up serially
-            gs AS HASH,
-            -- Create a fake response that is a simple string concatenation
-            'Response for hash ' || gs AS RESPONSE
+            -- Hash the input with SHA256 returning bytea
+            digest(gs::text, 'sha256') AS hash,
+            -- Generate a random 20-character response
+            substring(md5(random()::text) from 1 for 20) AS response
         FROM generate_series(current_start, current_end) AS gs;
 
         -- Log progress every 10 million rows
@@ -44,7 +45,7 @@ BEGIN
 END $$;
 
 -- Analyze table for better query planning
-ANALYZE OVERRIDES;
+VACUUM ANALYZE overrides;
 
 -- Display table statistics
 SELECT
@@ -66,5 +67,3 @@ FROM
     pg_indexes
 WHERE
     tablename = 'overrides';
-
-VACUUM ANALYZE OVERRIDES;

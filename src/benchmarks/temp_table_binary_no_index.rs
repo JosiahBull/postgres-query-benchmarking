@@ -1,11 +1,11 @@
 use crate::{BenchmarkContext, BenchmarkResult, BenchmarkTest, ExampleData};
 use async_trait::async_trait;
 
-/// Benchmark that uses temporary table with JOIN instead of IN
-pub struct TempTableJoinBenchmark;
+/// Benchmark that uses temporary table without index and binary COPY
+pub struct TempTableBinaryNoIndexBenchmark;
 
 #[async_trait]
-impl BenchmarkTest for TempTableJoinBenchmark {
+impl BenchmarkTest for TempTableBinaryNoIndexBenchmark {
     async fn run(
         &self,
         context: &BenchmarkContext,
@@ -14,7 +14,7 @@ impl BenchmarkTest for TempTableJoinBenchmark {
         let mut transaction = context.pool.begin().await?;
 
         // Create optimized unlogged table with PLAIN storage
-        sqlx::query("CREATE UNLOGGED TABLE temp_ids (id BYTEA STORAGE PLAIN PRIMARY KEY);")
+        sqlx::query("CREATE UNLOGGED TABLE temp_ids (id BYTEA STORAGE PLAIN);")
             .execute(&mut *transaction)
             .await?;
 
@@ -30,10 +30,10 @@ impl BenchmarkTest for TempTableJoinBenchmark {
         ];
 
         // Binary format structure constants
+        const LENGTH_PER_FIELD: u32 = std::mem::size_of::<[u8; 32]>() as u32;
         const SIZE_PER_TUPLE: usize =
-            std::mem::size_of::<i16>() + std::mem::size_of::<u32>() + std::mem::size_of::<i64>();
+            std::mem::size_of::<i16>() + std::mem::size_of::<u32>() + LENGTH_PER_FIELD as usize;
         const NUM_FIELDS_PER_TUPLE: i16 = 1;
-        const LENGTH_PER_FIELD: u32 = std::mem::size_of::<[u32; 8]>() as u32;
 
         // Pre-allocate buffer with all data at once for optimal performance
         let mut buf: Vec<u8> = Vec::with_capacity(
@@ -53,13 +53,19 @@ impl BenchmarkTest for TempTableJoinBenchmark {
         // Add end-of-data marker
         buf.extend_from_slice(&(-1i16).to_be_bytes());
 
+        // Verify buffer capacity was correctly calculated
+        assert_eq!(
+            buf.capacity(),
+            ids.len() * SIZE_PER_TUPLE + std::mem::size_of::<i16>() + SIG.len()
+        );
+
         // Send all data in one operation
         handle.send(buf).await?;
         handle.finish().await?;
 
-        // Use JOIN instead of IN for potentially better performance
+        // Perform the query using the temporary table
         let result: Vec<ExampleData> = sqlx::query_as(
-            "SELECT response FROM overrides JOIN temp_ids ON overrides.hash = temp_ids.id;",
+            "SELECT response FROM overrides WHERE hash IN (SELECT id FROM temp_ids);",
         )
         .fetch_all(&mut *transaction)
         .await?;
@@ -71,11 +77,11 @@ impl BenchmarkTest for TempTableJoinBenchmark {
     }
 
     fn name(&self) -> &'static str {
-        "temp_table_join"
+        "temp_table_binary_no_index"
     }
 
     fn description(&self) -> &'static str {
-        "Creates temporary table with binary COPY and uses JOIN instead of IN clause"
+        "Benchmark using a temporary table without index and binary COPY format"
     }
 
     async fn cleanup(&self, context: &BenchmarkContext) -> BenchmarkResult<()> {

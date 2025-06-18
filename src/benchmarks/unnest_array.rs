@@ -11,15 +11,14 @@ impl BenchmarkTest for UnnestArrayBenchmark {
     async fn run(
         &self,
         context: &BenchmarkContext,
-        ids: &[i64],
+        ids: &[[u8; 32]],
     ) -> BenchmarkResult<Vec<ExampleData>> {
-        let result: Vec<ExampleData> = sqlx::query_as(
-            "SELECT RESPONSE as response FROM OVERRIDES WHERE HASH IN (SELECT UNNEST($1::bigint[]));",
-        )
-        .bind(ids)
-        .fetch_all(&context.pool)
-        .await
-        .map_err(BenchmarkError::Database)?;
+        let result: Vec<ExampleData> =
+            sqlx::query_as("SELECT response FROM overrides WHERE hash IN (SELECT UNNEST($1));")
+                .bind(ids)
+                .fetch_all(&context.pool)
+                .await
+                .map_err(BenchmarkError::Database)?;
 
         Ok(result)
     }

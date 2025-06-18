@@ -1,17 +1,13 @@
-//! Benchmark implementations module
-//!
-//! This module contains all the different PostgreSQL query benchmark implementations.
-//! Each benchmark tests a different approach to querying with large sets of IDs.
-
-pub mod any_array;
-pub mod chunked_prepared;
-pub mod raw_sql_large_in;
-pub mod temp_table_any;
-pub mod temp_table_binary_copy;
-pub mod temp_table_join;
-pub mod temp_table_optimized_binary;
-pub mod temp_table_text_copy;
-pub mod unnest_array;
+mod any_array;
+mod chunked_prepared;
+mod raw_sql_large_in;
+mod temp_table_any;
+mod temp_table_binary_copy;
+mod temp_table_binary_no_index;
+mod temp_table_join;
+mod temp_table_optimized_binary;
+mod temp_table_text_copy;
+mod unnest_array;
 
 // Re-export all benchmark implementations
 pub use any_array::AnyArrayBenchmark;
@@ -19,6 +15,7 @@ pub use chunked_prepared::ChunkedPreparedBenchmark;
 pub use raw_sql_large_in::RawSqlLargeInBenchmark;
 pub use temp_table_any::TempTableAnyBenchmark;
 pub use temp_table_binary_copy::TempTableBinaryCopyBenchmark;
+pub use temp_table_binary_no_index::TempTableBinaryNoIndexBenchmark;
 pub use temp_table_join::TempTableJoinBenchmark;
 pub use temp_table_optimized_binary::TempTableOptimizedBinaryBenchmark;
 pub use temp_table_text_copy::TempTableTextCopyBenchmark;
@@ -39,6 +36,7 @@ pub fn get_all_benchmarks() -> Vec<Arc<dyn BenchmarkTest>> {
         Arc::new(TempTableJoinBenchmark),
         Arc::new(TempTableAnyBenchmark),
         Arc::new(RawSqlLargeInBenchmark),
+        Arc::new(TempTableBinaryNoIndexBenchmark),
     ]
 }
 

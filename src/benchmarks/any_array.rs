@@ -11,10 +11,10 @@ impl BenchmarkTest for AnyArrayBenchmark {
     async fn run(
         &self,
         context: &BenchmarkContext,
-        ids: &[i64],
+        ids: &[[u8; 32]],
     ) -> BenchmarkResult<Vec<ExampleData>> {
         let result: Vec<ExampleData> =
-            sqlx::query_as("SELECT RESPONSE as response FROM OVERRIDES WHERE HASH = ANY($1);")
+            sqlx::query_as("SELECT response FROM overrides WHERE hash = ANY($1);")
                 .bind(ids)
                 .fetch_all(&context.pool)
                 .await

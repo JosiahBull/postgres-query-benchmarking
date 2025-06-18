@@ -9,12 +9,12 @@ impl BenchmarkTest for TempTableAnyBenchmark {
     async fn run(
         &self,
         context: &BenchmarkContext,
-        ids: &[i64],
+        ids: &[[u8; 32]],
     ) -> BenchmarkResult<Vec<ExampleData>> {
         let mut transaction = context.pool.begin().await?;
 
         // Create optimized unlogged table with PLAIN storage
-        sqlx::query("CREATE UNLOGGED TABLE temp_ids (id BIGINT STORAGE PLAIN PRIMARY KEY);")
+        sqlx::query("CREATE UNLOGGED TABLE temp_ids (id BYTEA STORAGE PLAIN PRIMARY KEY);")
             .execute(&mut *transaction)
             .await?;
 
@@ -33,7 +33,7 @@ impl BenchmarkTest for TempTableAnyBenchmark {
         const SIZE_PER_TUPLE: usize =
             std::mem::size_of::<i16>() + std::mem::size_of::<u32>() + std::mem::size_of::<i64>();
         const NUM_FIELDS_PER_TUPLE: i16 = 1;
-        const LENGTH_PER_FIELD: u32 = std::mem::size_of::<i64>() as u32;
+        const LENGTH_PER_FIELD: u32 = std::mem::size_of::<[u8; 32]>() as u32;
 
         // Pre-allocate buffer with all data at once for optimal performance
         let mut buf: Vec<u8> = Vec::with_capacity(
@@ -47,7 +47,7 @@ impl BenchmarkTest for TempTableAnyBenchmark {
         for id in ids.iter() {
             buf.extend_from_slice(&NUM_FIELDS_PER_TUPLE.to_be_bytes());
             buf.extend_from_slice(&LENGTH_PER_FIELD.to_be_bytes());
-            buf.extend_from_slice(&id.to_be_bytes());
+            buf.extend_from_slice(id);
         }
 
         // Add end-of-data marker
@@ -59,7 +59,7 @@ impl BenchmarkTest for TempTableAnyBenchmark {
 
         // Use ANY operator with subquery for different query planning
         let result: Vec<ExampleData> = sqlx::query_as(
-            "SELECT OVERRIDES.RESPONSE as response FROM OVERRIDES WHERE HASH = ANY(SELECT id FROM temp_ids);",
+            "SELECT response FROM overrides WHERE hash = ANY(SELECT id FROM temp_ids);",
         )
         .fetch_all(&mut *transaction)
         .await?;

@@ -11,12 +11,17 @@ impl BenchmarkTest for TempTableTextCopyBenchmark {
     async fn run(
         &self,
         context: &BenchmarkContext,
-        ids: &[i64],
+        ids: &[[u8; 32]],
     ) -> BenchmarkResult<Vec<ExampleData>> {
+        // Couldn't get this to work. :(
+        return Err(crate::BenchmarkError::Setup {
+            message: "COPY with text format not supported in this benchmark".to_string(),
+        });
+
         let mut transaction = context.pool.begin().await?;
 
         // Create a temporary unlogged table to hold the IDs
-        sqlx::query("CREATE UNLOGGED TABLE temp_ids (id BIGINT PRIMARY KEY);")
+        sqlx::query("CREATE UNLOGGED TABLE temp_ids (id BYTEA PRIMARY KEY);")
             .execute(&mut *transaction)
             .await?;
 
@@ -26,16 +31,21 @@ impl BenchmarkTest for TempTableTextCopyBenchmark {
             .await?;
 
         // Prepare the IDs as text format with newlines
-        let ids_as_bytes: Vec<u8> = ids.iter().map(|id| id.to_string().into_bytes()).fold(
-            Vec::with_capacity(ids.len() * 20), //estimate...
-            |mut acc, id_bytes| {
-                if !acc.is_empty() {
-                    acc.push(b'\n'); // Add newline between IDs
-                }
-                acc.extend(id_bytes);
-                acc
-            },
-        );
+        let ids_as_bytes: Vec<u8> = ids
+            .iter()
+            .map(|id| {
+                // Reverse the byte order to get big-endian encoding
+                let id_be: Vec<u8> = id.iter().rev().copied().collect();
+                let id_hex = hex::encode(hex::encode(id_be).to_uppercase()).to_uppercase();
+                format!("\\x{}\n", id_hex)
+            })
+            .fold(
+                Vec::with_capacity(ids.len() * 30), //estimate...
+                |mut acc, id_str| {
+                    acc.extend(id_str.as_bytes());
+                    acc
+                },
+            );
 
         // Send the data to PostgreSQL
         handle.send(ids_as_bytes).await?;
@@ -43,7 +53,7 @@ impl BenchmarkTest for TempTableTextCopyBenchmark {
 
         // Perform the query using the temporary table
         let result: Vec<ExampleData> = sqlx::query_as(
-            "SELECT RESPONSE as response FROM OVERRIDES WHERE HASH IN (SELECT id FROM temp_ids);",
+            "SELECT response FROM overrides WHERE hash IN (SELECT id FROM temp_ids);",
         )
         .fetch_all(&mut *transaction)
         .await?;

@@ -11,18 +11,22 @@ impl BenchmarkTest for RawSqlLargeInBenchmark {
     async fn run(
         &self,
         context: &BenchmarkContext,
-        ids: &[i64],
+        ids: &[[u8; 32]],
     ) -> BenchmarkResult<Vec<ExampleData>> {
         // Build the IN clause string directly to eliminate parameter binding overhead
         let ids_str = ids
             .iter()
-            .map(|id| id.to_string())
+            .map(|id| {
+                // https://stackoverflow.com/questions/42117523/importing-bytea-data-into-postgresql-by-using-copy-from-stdin
+                // We need to format this entry as the string `\\x657B954D27B4AC56FA997D24A5FF2563`
+                format!("'\\x{}'", hex::encode(id))
+            })
             .collect::<Vec<_>>()
             .join(",");
 
         // Construct the complete SQL query
         let query = format!(
-            "SELECT RESPONSE as response FROM OVERRIDES WHERE HASH IN ({});",
+            "SELECT response FROM overrides WHERE hash IN ({});",
             ids_str
         );
 

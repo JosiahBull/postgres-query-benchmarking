@@ -111,11 +111,11 @@ impl BenchmarkSuite {
     }
 
     /// Run a single benchmark with multiple iterations
-    #[instrument(skip(self, benchmark, ids))]
+    #[instrument(skip(self, benchmark))]
     async fn run_benchmark(
         &mut self,
         benchmark: Arc<dyn BenchmarkTest>,
-        ids: &[i64],
+        num_ids: usize,
         iterations: usize,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let name = benchmark.name();
@@ -126,12 +126,20 @@ impl BenchmarkSuite {
             name, iterations
         );
 
-        let mut stats = BenchmarkStats::new(name.to_string(), description.to_string(), ids.len());
+        let mut stats = BenchmarkStats::new(name.to_string(), description.to_string(), num_ids);
 
         // Warmup run (only if benchmark needs it)
         if benchmark.needs_warmup() {
             info!("Warming up benchmark: {}", name);
-            match benchmark.run(&self.context, ids).await {
+            // Generate test data
+            info!(
+                "Generating {} unique random IDs between 1 and {}",
+                num_ids, ID_RANGE
+            );
+            let ids = generate_test_ids(num_ids, ID_RANGE);
+            info!("Generated {} unique IDs for testing", ids.len());
+
+            match benchmark.run(&self.context, &ids).await {
                 Ok(_) => info!("Warmup completed for: {}", name),
                 Err(e) => {
                     error!("Warmup failed for {}: {}", name, e);
@@ -152,8 +160,14 @@ impl BenchmarkSuite {
                 );
             }
 
+            tracing::debug!(
+                "Generating {} unique random IDs between 1 and {}",
+                num_ids,
+                ID_RANGE
+            );
+            let ids = generate_test_ids(num_ids, ID_RANGE);
             let start = Instant::now();
-            match benchmark.run(&self.context, ids).await {
+            match benchmark.run(&self.context, &ids).await {
                 Ok(results) => {
                     let duration = start.elapsed();
                     stats.add_result(duration, results.len());
@@ -341,14 +355,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize benchmark suite
     let mut suite = BenchmarkSuite::new(&database_url, cli.csv_output, &cli.csv_dir).await?;
 
-    // Generate test data
-    info!(
-        "Generating {} unique random IDs between 1 and {}",
-        cli.test_ids, ID_RANGE
-    );
-    let ids = generate_test_ids(cli.test_ids, ID_RANGE);
-    info!("Generated {} unique IDs for testing", ids.len());
-
     // Select benchmarks based on command
     let benchmarks = match cli.command {
         None => {
@@ -379,7 +385,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Run all selected benchmarks
     for benchmark in benchmarks {
-        if let Err(e) = suite.run_benchmark(benchmark, &ids, cli.iterations).await {
+        if let Err(e) = suite
+            .run_benchmark(benchmark, cli.test_ids, cli.iterations)
+            .await
+        {
             error!("Failed to run benchmark: {}", e);
         }
     }

@@ -11,12 +11,12 @@ impl BenchmarkTest for TempTableBinaryCopyBenchmark {
     async fn run(
         &self,
         context: &BenchmarkContext,
-        ids: &[i64],
+        ids: &[[u8; 32]],
     ) -> BenchmarkResult<Vec<ExampleData>> {
         let mut transaction = context.pool.begin().await?;
 
         // Create a temporary unlogged table to hold the IDs
-        sqlx::query("CREATE UNLOGGED TABLE temp_ids (id BIGINT PRIMARY KEY);")
+        sqlx::query("CREATE UNLOGGED TABLE temp_ids (id BYTEA PRIMARY KEY);")
             .execute(&mut *transaction)
             .await?;
 
@@ -35,10 +35,10 @@ impl BenchmarkTest for TempTableBinaryCopyBenchmark {
         handle.send(&SIG[..]).await?;
 
         // Binary format structure constants
+        const LENGTH_PER_FIELD: u32 = std::mem::size_of::<[u8; 32]>() as u32;
         const SIZE_PER_TUPLE: usize =
-            std::mem::size_of::<i16>() + std::mem::size_of::<u32>() + std::mem::size_of::<i64>();
+            std::mem::size_of::<i16>() + std::mem::size_of::<u32>() + LENGTH_PER_FIELD as usize;
         const NUM_FIELDS_PER_TUPLE: i16 = 1;
-        const LENGTH_PER_FIELD: u32 = std::mem::size_of::<i64>() as u32;
 
         // Process IDs in chunks to manage memory usage
         const MAX_CHUNK_SIZE: usize = 4096;
@@ -64,7 +64,7 @@ impl BenchmarkTest for TempTableBinaryCopyBenchmark {
                     .copy_from_slice(&LENGTH_PER_FIELD.to_be_bytes());
                 offset += std::mem::size_of::<u32>();
                 // Skip the ID value (will be filled per chunk)
-                offset += std::mem::size_of::<i64>();
+                offset += LENGTH_PER_FIELD as usize;
             }
             init
         };
@@ -76,7 +76,7 @@ impl BenchmarkTest for TempTableBinaryCopyBenchmark {
                 // Fill in the ID value in the pre-structured buffer
                 buf[offset + std::mem::size_of::<i16>() + std::mem::size_of::<u32>()
                     ..offset + SIZE_PER_TUPLE]
-                    .copy_from_slice(&id.to_be_bytes());
+                    .copy_from_slice(id);
                 offset += SIZE_PER_TUPLE;
             }
             // Send the buffer with actual data
@@ -88,7 +88,7 @@ impl BenchmarkTest for TempTableBinaryCopyBenchmark {
 
         // Perform the query using the temporary table
         let result: Vec<ExampleData> = sqlx::query_as(
-            "SELECT RESPONSE as response FROM OVERRIDES WHERE HASH IN (SELECT id FROM temp_ids);",
+            "SELECT response FROM overrides WHERE hash IN (SELECT id FROM temp_ids);",
         )
         .fetch_all(&mut *transaction)
         .await?;

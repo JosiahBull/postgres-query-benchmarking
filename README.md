@@ -16,11 +16,25 @@ The benchmarking suite tests different methods for executing queries with large 
 8. **Temporary Table with ANY** - Uses ANY operator with temp table subquery
 9. **Raw SQL Large IN** - Builds large IN clause string to eliminate network overhead
 
-## Prerequisites
+## Results
 
-- Rust (latest stable)
-- Docker and Docker Compose
-- PostgreSQL client tools (`psql`)
+```
+PostgreSQL Query Benchmark Results
+==================================
+Timestamp: 2025-06-18 22:43:10 UTC
+
+Benchmark                               Runs       Median         Mean          Min          Max       StdDev     Rows InputSize
+--------------------------------------------------------------------------------------------------------------------------------------------
+temp_table_any                           100     174.96ms     174.89ms     164.15ms     196.25ms       6.16ms    60000    60000
+temp_table_join                          100     176.61ms     179.28ms     166.54ms     224.13ms      10.91ms    60000    60000
+temp_table_optimized_binary              100     177.46ms     180.10ms     165.79ms     225.36ms      10.02ms    60000    60000
+temp_table_binary_copy                   100     180.77ms     182.97ms     167.46ms     216.38ms      11.00ms    60000    60000
+any_array                                100     224.14ms     225.49ms     215.03ms     257.27ms       7.67ms    60000    60000
+unnest_array                             100     272.67ms     276.71ms     259.85ms     326.24ms      13.19ms    60000    60000
+raw_sql_large_in                         100     275.19ms     278.87ms     262.49ms     317.07ms      11.10ms    60000    60000
+temp_table_binary_no_index               100     280.47ms     288.43ms     269.69ms     388.50ms      20.48ms    60000    60000
+chunked_prepared                         100     298.36ms     301.71ms     279.73ms     336.27ms      12.59ms    60000    60000
+```
 
 ## Quick Start
 
@@ -113,12 +127,6 @@ pub use my_approach::MyApproachBenchmark;
 // Add to get_all_benchmarks() function:
 Arc::new(MyApproachBenchmark),
 ```
-
-### Performance Notes
-
-- Run benchmarks with `--release` flag for accurate timing
-- The Docker container is configured with cold query settings for consistent benchmarking
-- JIT compilation and plan caching are disabled to ensure true cold query performance
 
 ## License
 

@@ -7,7 +7,7 @@ set -euo pipefail
 
 # Configuration
 CONTAINER_NAME="pg-benchmark"
-POSTGRES_VERSION="16"
+POSTGRES_VERSION="latest"
 POSTGRES_USER="postgres"
 POSTGRES_PASSWORD="postgres"
 POSTGRES_DB="postgres"
@@ -121,7 +121,7 @@ cleanup_existing() {
     # Remove data directory if it exists
     if [[ -d "$DATA_DIR" ]]; then
         log_info "Removing existing data directory..."
-        rm -rf "$DATA_DIR"
+        sudo rm -rf "$DATA_DIR"
         log_success "Data directory removed"
     fi
 }

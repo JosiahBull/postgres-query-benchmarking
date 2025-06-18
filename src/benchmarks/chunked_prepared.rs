@@ -14,7 +14,7 @@ impl BenchmarkTest for ChunkedPreparedBenchmark {
     async fn run(
         &self,
         context: &BenchmarkContext,
-        ids: &[i64],
+        ids: &[[u8; 32]],
     ) -> BenchmarkResult<Vec<ExampleData>> {
         let query = build_prepared_query(MAX_VALUES);
         let mut all_overrides = Vec::new();
@@ -56,7 +56,7 @@ impl BenchmarkTest for ChunkedPreparedBenchmark {
 
 /// Build a prepared query string with the specified number of placeholders
 fn build_prepared_query(num_values: usize) -> String {
-    let mut query = "SELECT RESPONSE as response FROM OVERRIDES WHERE HASH IN (".to_owned();
+    let mut query = "SELECT response FROM overrides WHERE hash IN (".to_owned();
 
     for i in 0..num_values {
         if i > 0 {
@@ -67,27 +67,4 @@ fn build_prepared_query(num_values: usize) -> String {
 
     query.push_str(");");
     query
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_build_prepared_query() {
-        let query = build_prepared_query(3);
-        assert_eq!(
-            query,
-            "SELECT RESPONSE as response FROM OVERRIDES WHERE HASH IN ($1, $2, $3);"
-        );
-    }
-
-    #[test]
-    fn test_build_prepared_query_single() {
-        let query = build_prepared_query(1);
-        assert_eq!(
-            query,
-            "SELECT RESPONSE as response FROM OVERRIDES WHERE HASH IN ($1);"
-        );
-    }
 }

@@ -9,12 +9,12 @@ impl BenchmarkTest for TempTableOptimizedBinaryBenchmark {
     async fn run(
         &self,
         context: &BenchmarkContext,
-        ids: &[i64],
+        ids: &[[u8; 32]],
     ) -> BenchmarkResult<Vec<ExampleData>> {
         let mut transaction = context.pool.begin().await?;
 
         // Create optimized unlogged table with PLAIN storage
-        sqlx::query("CREATE UNLOGGED TABLE temp_ids (id BIGINT STORAGE PLAIN PRIMARY KEY);")
+        sqlx::query("CREATE UNLOGGED TABLE temp_ids (id BYTEA STORAGE PLAIN PRIMARY KEY);")
             .execute(&mut *transaction)
             .await?;
 
@@ -30,10 +30,10 @@ impl BenchmarkTest for TempTableOptimizedBinaryBenchmark {
         ];
 
         // Binary format structure constants
+        const LENGTH_PER_FIELD: u32 = std::mem::size_of::<[u32; 8]>() as u32;
         const SIZE_PER_TUPLE: usize =
-            std::mem::size_of::<i16>() + std::mem::size_of::<u32>() + std::mem::size_of::<i64>();
+            std::mem::size_of::<i16>() + std::mem::size_of::<u32>() + LENGTH_PER_FIELD as usize;
         const NUM_FIELDS_PER_TUPLE: i16 = 1;
-        const LENGTH_PER_FIELD: u32 = std::mem::size_of::<i64>() as u32;
 
         // Pre-allocate buffer with all data at once for optimal performance
         let mut buf: Vec<u8> = Vec::with_capacity(
@@ -47,7 +47,7 @@ impl BenchmarkTest for TempTableOptimizedBinaryBenchmark {
         for id in ids.iter() {
             buf.extend_from_slice(&NUM_FIELDS_PER_TUPLE.to_be_bytes());
             buf.extend_from_slice(&LENGTH_PER_FIELD.to_be_bytes());
-            buf.extend_from_slice(&id.to_be_bytes());
+            buf.extend_from_slice(id);
         }
 
         // Add end-of-data marker
@@ -65,7 +65,7 @@ impl BenchmarkTest for TempTableOptimizedBinaryBenchmark {
 
         // Perform the query using the temporary table
         let result: Vec<ExampleData> = sqlx::query_as(
-            "SELECT RESPONSE as response FROM OVERRIDES WHERE HASH IN (SELECT id FROM temp_ids);",
+            "SELECT response FROM overrides WHERE hash IN (SELECT id FROM temp_ids);",
         )
         .fetch_all(&mut *transaction)
         .await?;

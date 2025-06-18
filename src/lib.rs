@@ -273,7 +273,7 @@ pub trait BenchmarkTest: Send + Sync {
     async fn run(
         &self,
         context: &BenchmarkContext,
-        ids: &[i64],
+        ids: &[[u8; 32]],
     ) -> BenchmarkResult<Vec<ExampleData>>;
 
     /// Get the name of this benchmark (used for identification)
@@ -306,6 +306,7 @@ pub mod benchmarks;
 /// Utility functions for benchmarking
 pub mod utils {
     use super::*;
+    use sha2::Digest;
     use std::collections::HashSet;
     use std::fs;
     use std::path::Path;
@@ -366,8 +367,8 @@ pub mod utils {
     /// * `range` - Maximum value for ID generation
     ///
     /// # Returns
-    /// * `Vec<i64>` - Vector of unique random IDs
-    pub fn generate_test_ids(count: usize, range: u64) -> Vec<i64> {
+    /// * `Vec<[u8; 32]>` - Vector of unique random IDs hashed with SHA-256
+    pub fn generate_test_ids(count: usize, range: u64) -> Vec<[u8; 32]> {
         info!(
             "Generating {} unique random IDs between 1 and {}",
             count, range
@@ -382,7 +383,17 @@ pub mod utils {
             ids.insert(id as i64);
         }
 
-        ids.into_iter().collect()
+        // Sha256 hash the IDs
+        ids.into_iter()
+            .map(|id| {
+                let mut hasher = sha2::Sha256::new();
+                hasher.update(id.to_string()); // Not how we would do this in production, but for parity with PG implementation
+                let hash = hasher.finalize();
+                let mut id_bytes = [0u8; 32];
+                id_bytes.copy_from_slice(&hash);
+                id_bytes
+            })
+            .collect::<Vec<[u8; 32]>>()
     }
 
     /// Validate that a benchmark result is reasonable
